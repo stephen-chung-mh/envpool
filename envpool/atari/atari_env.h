@@ -24,6 +24,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <mutex>
 
 #include "ale_interface.hpp"
 #include "envpool/core/async_envpool.h"
@@ -100,6 +101,13 @@ class AtariEnv : public Env<AtariEnvSpec> {
   Array resize_img_;
   std::uniform_int_distribution<> dist_noop_;
   std::string rom_path_;
+  bool quick_save_called_ = false;
+  ale::ALEState saved_state_;
+  std::deque<Array> saved_stack_buf_;
+  int saved_elapsed_step_;
+  int saved_lives_;
+  bool saved_done_;
+  std::mutex quick_save_load_mutex_;
 
  public:
   AtariEnv(const Spec& spec, int env_id)
@@ -228,6 +236,49 @@ class AtariEnv : public Env<AtariEnvSpec> {
   }
 
   bool IsDone() override { return done_; }
+
+  void QuickSave() override {
+    std::lock_guard<std::mutex> lock(quick_save_load_mutex_);
+
+    try {
+      // Save the current state of the ALE environment
+      saved_state_ = env_->cloneSystemState();
+
+      // Save the current frame stack, lives, and other relevant variables
+      saved_stack_buf_ = stack_buf_;  // This is a deep copy operation
+      saved_elapsed_step_ = elapsed_step_;
+      saved_lives_ = lives_;
+      saved_done_ = done_;
+
+      // Set the flag after successfully saving the state
+      quick_save_called_ = true;
+    } catch (const std::exception &e) {
+      std::cerr << "Error during QuickSave: " << e.what() << std::endl;
+      throw;
+    }
+  }
+
+  void QuickLoad() override {
+    std::lock_guard<std::mutex> lock(quick_save_load_mutex_);
+
+    if (!quick_save_called_) {
+      throw std::runtime_error("QuickLoad called before QuickSave");
+    }
+
+    try {
+      // Restore the ALE environment state
+      env_->restoreSystemState(saved_state_);
+
+      // Restore the frame stack, lives, and other relevant variables
+      stack_buf_ = saved_stack_buf_;  // Restore the saved stack buffer
+      elapsed_step_ = saved_elapsed_step_;
+      lives_ = saved_lives_;
+      done_ = saved_done_;
+    } catch (const std::exception &e) {
+      std::cerr << "Error during QuickLoad: " << e.what() << std::endl;
+      throw;
+    }
+  }
 
  private:
   void WriteState(float reward, float discount, float info_reward) {

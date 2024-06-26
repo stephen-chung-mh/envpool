@@ -38,6 +38,8 @@ class ActionBufferQueue {
     int env_id;
     int order;
     bool force_reset;
+    bool quick_save;
+    bool quick_load;
   };
 
  protected:

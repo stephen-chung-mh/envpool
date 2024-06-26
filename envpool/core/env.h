@@ -177,6 +177,9 @@ class Env {
   }
   virtual bool IsDone() { throw std::runtime_error("is_done not implemented"); }
 
+  virtual void QuickSave() { throw std::runtime_error("quick save not implemented"); }
+  virtual void QuickLoad() { throw std::runtime_error("quick load not implemented"); }
+
  protected:
   void PreProcess(StateBufferQueue* sbq, int order, bool reset) {
     sbq_ = sbq;

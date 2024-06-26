@@ -48,6 +48,12 @@ class EnvPool {
   virtual void Reset(const Array& env_ids) {
     throw std::runtime_error("reset not implemented");
   }
+  virtual void QuickSave(const Array& env_ids) {
+    throw std::runtime_error("quick save not implemented");
+  }
+  virtual void QuickLoad(const Array& env_ids) {
+    throw std::runtime_error("quick load not implemented");
+  }
 };
 
 #endif  // ENVPOOL_CORE_ENVPOOL_H_

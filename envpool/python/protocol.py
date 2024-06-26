@@ -157,6 +157,12 @@ class EnvPool(Protocol):
   def _reset(self, env_id: np.ndarray) -> None:
     """Cpp private _reset method."""
 
+  def _quick_save(self, env_id: np.ndarray) -> None:
+    """Cpp private _quick_save method."""
+
+  def _quick_load(self, env_id: np.ndarray) -> None:
+    """Cpp private _quick_load method."""
+
   def _from(
     self,
     action: Union[Dict[str, Any], np.ndarray],
@@ -230,6 +236,18 @@ class EnvPool(Protocol):
     env_id: Optional[np.ndarray] = None,
   ) -> Union[TimeStep, Tuple]:
     """Envpool reset interface."""
+
+  def quick_save(
+    self,
+    env_id: Optional[np.ndarray] = None,
+  ) -> None:
+    """Envpool quick save interface."""
+
+  def quick_load(
+    self,
+    env_id: Optional[np.ndarray] = None,
+  ) -> None:
+    """Envpool quick load interface."""
 
   def xla(self) -> Tuple[Any, Callable, Callable, Callable]:
     """Get the xla functions."""

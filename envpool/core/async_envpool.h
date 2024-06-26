@@ -54,6 +54,10 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
   std::vector<std::unique_ptr<Env>> envs_;
   std::vector<std::atomic<int>> stepping_env_;
   std::chrono::duration<double> dur_send_, dur_recv_, dur_send_all_;
+  std::atomic<int> quick_save_count_;
+  std::atomic<int> quick_load_count_;
+  std::mutex mtx_;
+  std::condition_variable cv_;
 
   template <typename V>
   void SendImpl(V&& action) {
@@ -69,6 +73,8 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
           .env_id = eid,
           .order = is_sync_ ? i : -1,
           .force_reset = false,
+          .quick_save = false,
+          .quick_load = false,
       });
     }
     if (is_sync_) {
@@ -100,7 +106,9 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
         state_buffer_queue_(new StateBufferQueue(
             batch_, num_envs_, max_num_players_,
             spec.state_spec.template AllValues<ShapeSpec>())),
-        envs_(num_envs_) {
+        envs_(num_envs_),
+        quick_save_count_(0), 
+        quick_load_count_(0) {
     std::size_t processor_count = std::thread::hardware_concurrency();
     ThreadPool init_pool(std::min(processor_count, num_envs_));
     std::vector<std::future<void>> result;
@@ -123,8 +131,20 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
           }
           int env_id = raw_action.env_id;
           int order = raw_action.order;
+          bool quick_save = raw_action.quick_save;
+          bool quick_load = raw_action.quick_load;
           bool reset = raw_action.force_reset || envs_[env_id]->IsDone();
-          envs_[env_id]->EnvStep(state_buffer_queue_.get(), order, reset);
+          if (quick_save){
+            envs_[env_id]->QuickSave();
+            quick_save_count_++;
+            cv_.notify_one();
+          } else if (quick_load){
+            envs_[env_id]->QuickLoad();
+            quick_load_count_++;
+            cv_.notify_one();
+          } else {
+            envs_[env_id]->EnvStep(state_buffer_queue_.get(), order, reset);
+          }
         }
       });
     }
@@ -180,6 +200,8 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
     std::vector<ActionSlice> actions(shared_offset);
     for (int i = 0; i < shared_offset; ++i) {
       actions[i].force_reset = true;
+      actions[i].quick_save = false;
+      actions[i].quick_load = false;
       actions[i].env_id = tenv_ids[i];
       actions[i].order = is_sync_ ? i : -1;
     }
@@ -188,6 +210,47 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
     }
     action_buffer_queue_->EnqueueBulk(actions);
   }
+
+  void QuickSave(const Array& env_ids) override {
+    TArray<int> tenv_ids(env_ids);
+    int shared_offset = tenv_ids.Shape(0);
+    std::vector<ActionSlice> actions(shared_offset);
+    {
+      std::lock_guard<std::mutex> lock(mtx_);
+      quick_save_count_ = 0;
+    }
+    for (int i = 0; i < shared_offset; ++i) {
+      actions[i].force_reset = false;
+      actions[i].quick_save = true;
+      actions[i].quick_load = false;
+      actions[i].env_id = tenv_ids[i];
+      actions[i].order = is_sync_ ? i : -1;
+    }
+    action_buffer_queue_->EnqueueBulk(actions);
+    std::unique_lock<std::mutex> lock(mtx_);
+    cv_.wait(lock, [this, shared_offset] { return quick_save_count_ >= shared_offset; });
+  }
+
+  void QuickLoad(const Array& env_ids) override {
+    TArray<int> tenv_ids(env_ids);
+    int shared_offset = tenv_ids.Shape(0);
+    std::vector<ActionSlice> actions(shared_offset);
+    {
+      std::lock_guard<std::mutex> lock(mtx_);
+      quick_load_count_ = 0;
+    }
+    for (int i = 0; i < shared_offset; ++i) {
+      actions[i].force_reset = false;
+      actions[i].quick_save = false;
+      actions[i].quick_load = true;
+      actions[i].env_id = tenv_ids[i];
+      actions[i].order = is_sync_ ? i : -1;
+    }
+    action_buffer_queue_->EnqueueBulk(actions);
+    std::unique_lock<std::mutex> lock(mtx_);
+    cv_.wait(lock, [this, shared_offset] { return quick_load_count_ >= shared_offset; });
+  }
+
 };
 
 #endif  // ENVPOOL_CORE_ASYNC_ENVPOOL_H_

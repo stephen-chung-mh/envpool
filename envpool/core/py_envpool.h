@@ -273,6 +273,18 @@ class PyEnvPool : public EnvPool {
     py::gil_scoped_release release;
     EnvPool::Reset(arr);
   }
+  void PyQuickSave(const py::array& env_ids) {
+    // PyArray arr = PyArray::From<int>(env_ids);
+    auto arr = NumpyToArrayIncRef<int>(env_ids);
+    py::gil_scoped_release release;
+    EnvPool::QuickSave(arr);
+  }  
+  void PyQuickLoad(const py::array& env_ids) {
+    // PyArray arr = PyArray::From<int>(env_ids);
+    auto arr = NumpyToArrayIncRef<int>(env_ids);
+    py::gil_scoped_release release;
+    EnvPool::QuickLoad(arr);
+  }  
 };
 
 template <typename EnvPool>
@@ -306,6 +318,8 @@ py::object abc_meta = py::module::import("abc").attr("ABCMeta");
       .def("_recv", &ENVPOOL::PyRecv)                                \
       .def("_send", &ENVPOOL::PySend)                                \
       .def("_reset", &ENVPOOL::PyReset)                              \
+      .def("_quick_save", &ENVPOOL::PyQuickSave)                     \
+      .def("_quick_load", &ENVPOOL::PyQuickLoad)                     \
       .def_readonly_static("_state_keys", &ENVPOOL::py_state_keys)   \
       .def_readonly_static("_action_keys", &ENVPOOL::py_action_keys) \
       .def("_xla", &ENVPOOL::Xla);

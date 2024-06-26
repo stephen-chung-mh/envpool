@@ -155,6 +155,22 @@ class EnvPoolMixin(ABC):
     return self.recv(
       reset=True, return_info=self.config["gym_reset_return_info"]
     )
+  
+  def quick_save(
+    self: EnvPool,
+    env_id: Optional[np.ndarray] = None,
+  ) -> None:
+    if env_id is None:
+      env_id = self.all_env_ids
+    self._quick_save(env_id)
+
+  def quick_load(
+    self: EnvPool,
+    env_id: Optional[np.ndarray] = None,
+  ) -> None:
+    if env_id is None:
+      env_id = self.all_env_ids
+    self._quick_load(env_id)
 
   @property
   def config(self: EnvPool) -> Dict[str, Any]:
