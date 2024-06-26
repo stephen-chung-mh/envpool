@@ -136,11 +136,17 @@ class AsyncEnvPool : public EnvPool<typename Env::Spec> {
           bool reset = raw_action.force_reset || envs_[env_id]->IsDone();
           if (quick_save){
             envs_[env_id]->QuickSave();
-            quick_save_count_++;
+            {
+              std::lock_guard<std::mutex> lock(mtx_);
+              quick_save_count_++;
+            }
             cv_.notify_one();
           } else if (quick_load){
             envs_[env_id]->QuickLoad();
-            quick_load_count_++;
+            {
+              std::lock_guard<std::mutex> lock(mtx_);
+              quick_load_count_++;
+            }
             cv_.notify_one();
           } else {
             envs_[env_id]->EnvStep(state_buffer_queue_.get(), order, reset);
