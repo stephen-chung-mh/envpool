@@ -245,7 +245,14 @@ class AtariEnv : public Env<AtariEnvSpec> {
       saved_state_ = env_->cloneSystemState();
 
       // Save the current frame stack, lives, and other relevant variables
-      saved_stack_buf_ = stack_buf_;  // This is a deep copy operation
+      saved_stack_buf_.clear();
+      for (const auto& frame : stack_buf_) {
+        std::vector<int> shape_vec(frame.Shape().begin(), frame.Shape().end()); // Convert shape to std::vector<int>
+        ShapeSpec shape_spec(frame.element_size, shape_vec); // Create a ShapeSpec from the frame
+        Array saved_frame(shape_spec); // Create a new Array with the same spec
+        saved_frame.Assign(frame); // Use Assign to deep copy the content
+        saved_stack_buf_.push_back(std::move(saved_frame));
+      }
       saved_elapsed_step_ = elapsed_step_;
       saved_lives_ = lives_;
       saved_done_ = done_;
@@ -270,7 +277,14 @@ class AtariEnv : public Env<AtariEnvSpec> {
       env_->restoreSystemState(saved_state_);
 
       // Restore the frame stack, lives, and other relevant variables
-      stack_buf_ = saved_stack_buf_;  // Restore the saved stack buffer
+      stack_buf_.clear();
+      for (const auto& frame : saved_stack_buf_) {
+        std::vector<int> shape_vec(frame.Shape().begin(), frame.Shape().end()); // Convert shape to std::vector<int>
+        ShapeSpec shape_spec(frame.element_size, shape_vec); // Create a ShapeSpec from the saved frame
+        Array restored_frame(shape_spec); // Create a new Array with the same spec
+        restored_frame.Assign(frame); // Use Assign to deep copy the content
+        stack_buf_.push_back(std::move(restored_frame));
+      }
       elapsed_step_ = saved_elapsed_step_;
       lives_ = saved_lives_;
       done_ = saved_done_;
